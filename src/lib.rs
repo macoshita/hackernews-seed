@@ -10,7 +10,11 @@ use seed::{prelude::*, *};
 // ------ ------
 
 // `init` describes what should happen when your app started.
-fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
+fn init(_: Url, orders: &mut impl Orders<Msg>) -> Model {
+    orders.perform_cmd(async {
+        Msg::Fetching
+    });
+
     Model::default()
 }
 
@@ -19,23 +23,48 @@ fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
 // ------ ------
 
 // `Model` describes our app state.
-type Model = i32;
+#[derive(Default)]
+pub struct Model {
+    items: Option<Vec<Item>>
+}
+
+#[derive(Debug)]
+pub struct Item {
+    id: i64,
+}
 
 // ------ ------
 //    Update
 // ------ ------
 
-// (Remove the line below once any of your `Msg` variants doesn't implement `Copy`.)
-#[derive(Copy, Clone)]
 // `Msg` describes the different events you can modify state with.
-enum Msg {
-    Increment,
+#[derive(Debug)]
+pub enum Msg {
+    Fetching,
+    Fetched(Vec<Item>),
 }
 
 // `update` describes how to handle each `Msg`.
-fn update(msg: Msg, model: &mut Model, _: &mut impl Orders<Msg>) {
+pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
-        Msg::Increment => *model += 1,
+        Msg::Fetching => {
+            orders.perform_cmd(async {
+                let resp = fetch("https://hacker-news.firebaseio.com/v0/topstories.json").await.expect("Failed to request");
+                let ids = resp.check_status().expect("Failed to request").json::<Vec<i64>>().await.expect("Failed to request");
+                let (ids, _) = ids.split_at(10);
+                let result = ids.iter().map(|&id| 
+                    Item {
+                        id: id,
+                    }
+                ).collect::<Vec<Item>>();
+                Msg::Fetched(result);
+            });
+        }
+
+        Msg::Fetched(items) => {
+            log(&items);
+            model.items = Some(items);
+        }
     }
 }
 
@@ -43,14 +72,14 @@ fn update(msg: Msg, model: &mut Model, _: &mut impl Orders<Msg>) {
 //     View
 // ------ ------
 
-// (Remove the line below once your `Model` become more complex.)
-#[allow(clippy::trivially_copy_pass_by_ref)]
 // `view` describes what to display.
-fn view(model: &Model) -> Node<Msg> {
+pub fn view(model: &Model) -> Node<Msg> {
     div![
-        "This is a counter: ",
-        C!["counter"],
-        button![model, ev(Ev::Click, |_| Msg::Increment),],
+        ul![
+            model.items.as_ref().map(|items| {
+                li!["yondayo"]
+            })
+        ]
     ]
 }
 
